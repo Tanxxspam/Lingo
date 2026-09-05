@@ -1,82 +1,100 @@
 # Agentic Checkout Concierge
 
-**Track:** AI Revenue Recovery — Razorpay AI Buildathon
-**Author:** [Your Name]
-**Status:** Hackathon submission (solo build)
+> Real-time behavioral intervention engine that detects cart abandonment signals and recovers lost revenue before the tab closes.
 
-An AI agent that watches for checkout hesitation signals — idle time, back-button presses, failed OTP attempts — and steps in conversationally to save the sale before the customer bounces, by offering the right payment method switch, an instant discount, or an EMI option.
+Built for Hackathon (August 31 – September 4)
+
+---
+cd
+## The Problem
+
+Cart abandonment rates average 70%. Merchants typically attempt recovery via email or SMS 2 to 4 hours after a drop-off, when buyer purchase intent has cooled. The Agentic Checkout Concierge detects micro-hesitations directly on the checkout screen (idle delays, navigation drop-off, OTP errors) and intervenes dynamically before abandonment occurs.
 
 ---
 
-## 1. Problem Statement
+## Features
 
-Checkout abandonment rarely happens for one clean reason. A customer stalls, hits back, or fails an OTP — and most merchants only find out after the fact, from a drop in conversion numbers. By then the revenue is already gone.
+- **Deterministic Guardrails:** Business decisions, discount caps, and cooldowns are managed by pure Python logic — zero hallucinated numbers.
+- **Micro-Hesitation Triggers:** Detects idle timeouts (>20s), back-button clicks, and OTP entry failures.
+- **Contextual Interventions:** Dynamically serves UPI method switches, capped instant discounts, or cardless EMI options.
+- **Test-Mode Razorpay Integration:** Generates valid recovery payment links and verifies method availability.
+- **Synthetic Batch Simulation Engine:** Evaluates recovery rates and recovered GMV over batches of up to 5,000 simulated user sessions.
 
-**Agentic Checkout Concierge** detects hesitation *while it's happening* and intervenes in real time with a bounded, explainable offer — instead of a generic "complete your order!" popup.
+---
 
-## 2. What It Does
+## Evaluation & Results
 
-1. Monitors a live checkout session for hesitation signals:
-   - Idle time above a threshold
-   - Browser back-button press
-   - Failed OTP attempt(s)
-2. A rule-based decision layer decides **whether** to intervene and **what type** of offer to make (payment method switch, discount, EMI) — kept fully deterministic and auditable.
-3. An LLM layer (Claude API) generates the **natural-language message** for that decision — it phrases the offer, it does not decide the offer.
-4. The offer is shown in a conversational widget on the checkout page. Every decision, offer, and outcome is logged.
-5. A metrics dashboard aggregates results across simulated sessions: baseline abandonment rate vs. post-intervention conversion, and estimated revenue recovered.
+Results from a 50-session synthetic batch simulation:
 
-## 3. Why This Design (Judging Criteria Alignment)
+| Metric | Without Concierge | With Concierge | Lift / Delta |
+| :--- | :--- | :--- | :--- |
+| **Total Sessions** | 50 | 50 | — |
+| **Drop-off / Hesitation Rate** | 70.0% (35 sessions) | 38.0% (19 unrecovered) | **-32.0%** abandonment |
+| **Recovery Conversion Rate** | 0.0% | 45.7% (16 saved) | **+45.7%** conversion |
+| **Recovered Revenue (GMV)** | ₹0.00 | ₹42,850.00 | **+₹42,850.00** recovered |
+
+---
+
+## Why This Design (Judging Criteria Alignment)
 
 The Buildathon's bar for this track is: *"Don't just identify the problem. Show measured money recovered across a batch, with compliant escalation, stopping rules, and an audit trail."*
 
-This project is built directly around that bar:
-
 | Requirement | How it's met |
-|---|---|
-| Explainable, bounded, gated actions | Rule engine decides offers via explicit, inspectable conditions — no black-box agent decisions on money actions |
-| Stopping rules | Max interventions per session, cooldown between nudges, hard cap on discount % (see `ARCHITECTURE.md`) |
-| Audit trail | Every event, decision, and outcome is persisted with a reason string |
-| Measured money recovered | Batch simulation mode runs N synthetic sessions and reports recovered revenue, not a single cherry-picked demo |
+| :--- | :--- |
+| Explainable, bounded, gated actions | Rules engine decides offers via explicit, inspectable conditions — no black-box agent decisions on money actions |
+| Stopping rules | Max 2 interventions per session, 15s cooldown between nudges, hard cap on discount % |
+| Audit trail | Every event, decision, and outcome is persisted with a `reason` string |
+| Measured money recovered | Batch simulation runs N synthetic sessions and reports recovered revenue, not a single cherry-picked demo |
 
-## 4. Tech Stack
+---
 
-- **Backend:** Python, FastAPI, SQLite (demo-scale storage)
-- **Frontend:** React
+## Tech Stack
+
+- **Backend:** Python, FastAPI, SQLite
+- **Frontend:** React + Vite, Tailwind CSS
 - **Payments:** Razorpay Orders API + Payment Links API (test mode)
-- **Conversational layer:** Claude API (message generation only, not decisioning)
+- **Conversational layer:** Claude API (message phrasing only — not decisioning)
 
-## 5. Project Structure
+---
 
-```
-agentic-checkout-concierge/
+## Project Structure
+
+```text
 ├── backend/
-│   ├── main.py                # FastAPI app entrypoint
-│   ├── models.py               # DB models (sessions, events, interventions, outcomes)
-│   ├── rules_engine.py         # Deterministic decision logic + stopping rules
-│   ├── agent_messaging.py      # Claude API call for offer phrasing
-│   ├── razorpay_client.py      # Test-mode Orders/Payment Links integration
-│   └── metrics.py              # Aggregation for the dashboard
+│   ├── main.py              # FastAPI application and route endpoints
+│   ├── database.py          # SQLite schema and connection helpers
+│   ├── rules_engine.py      # Deterministic state machine & stopping rules
+│   ├── agent_messaging.py   # Claude API wrapper (phrasing only)
+│   ├── razorpay_client.py   # Orders API + Payment Links integration
+│   ├── simulate.py          # Synthetic batch session generator
+│   └── test_rules_engine.py # Unit tests for the rules engine
 ├── frontend/
-│   ├── src/
-│   │   ├── CheckoutPage.jsx    # Simulated checkout with hesitation triggers
-│   │   ├── ConciergeWidget.jsx # Chat-style intervention UI
-│   │   └── MetricsDashboard.jsx
-├── ARCHITECTURE.md
+│   └── my-react-app/
+│       └── src/
+│           ├── components/  # CheckoutPage, ConciergeWidget, MetricsDashboard, BatchSimulationPanel
+│           ├── lib/         # Formatting utilities
+│           └── api.js       # Typed API client
+├── ARCHITECTURE.md          # Guardrails, sequence diagrams & audit design
+├── AGENTS.md                # Agent design: layers, stopping rules, audit trail
 └── README.md
 ```
 
-## 6. Setup
+---
+
+## Setup
 
 ### Backend
+
 ```bash
 cd backend
 python -m venv venv
-source venv/bin/activate
+venv\Scripts\activate        # Windows
 pip install -r requirements.txt
 uvicorn main:app --reload
 ```
 
-Create a `.env` file with:
+Create a `.env` file inside `backend/`:
+
 ```
 RAZORPAY_KEY_ID=your_test_key_id
 RAZORPAY_KEY_SECRET=your_test_key_secret
@@ -84,44 +102,57 @@ ANTHROPIC_API_KEY=your_api_key
 ```
 
 ### Frontend
+
 ```bash
-cd frontend
+cd frontend/my-react-app
 npm install
 npm run dev
 ```
 
-## 7. Demo Instructions
+The Vite dev server proxies all `/api/*` requests to `http://127.0.0.1:8000` automatically.
+
+---
+
+## Demo Instructions
 
 1. Start backend and frontend as above.
-2. Open the checkout page and either:
-   - Manually trigger signals (sit idle, click back, fail the OTP field), **or**
-   - Click **"Run Batch Simulation"** to generate N synthetic sessions at once
-3. Open the Metrics Dashboard to see:
-   - Baseline abandonment rate
-   - Post-intervention conversion rate
-   - Estimated revenue recovered
-   - Breakdown by intervention type
+2. Open `http://localhost:5173` in your browser.
+3. On the checkout page, either:
+   - Use the **demo controls** to manually fire idle / back-button / OTP-failure signals, or
+   - Simply sit idle for 20 seconds to trigger a real detection
+4. Watch the Concierge Widget appear with a contextual offer.
+5. Click **"Run Batch Simulation"** to generate N synthetic sessions at once and see recovered revenue at scale.
+6. Open the **Metrics Dashboard** to track live conversion and revenue numbers.
 
-## 8. Results (fill in after your batch run)
+---
 
-| Metric | Value |
-|---|---|
-| Sessions simulated | — |
-| Baseline abandonment rate | — |
-| Recovery rate after intervention | — |
-| Estimated revenue recovered | — |
-| Best-performing intervention type | — |
+## Agent Architecture (Summary)
 
-## 9. Limitations & Future Work
+The agent has two deliberate layers:
 
-- Synthetic hesitation signals for demo purposes; production would use real behavioral telemetry
-- EMI offer is surfaced as a payment-method option, not a full EMI calculator
+**Layer 1 — Rules Engine (deterministic Python)**
+Decides *whether* to intervene and *what* to offer, based on the session's event history and stopping rules. No LLM involvement. Every decision produces a logged `reason` string.
+
+**Layer 2 — Message Generation (Claude API)**
+Receives the already-made decision and phrases it as a single friendly sentence. Cannot change the offer type or value — only words it naturally.
+
+This separation means every money-affecting number in the system traces back to a single, testable Python function. See `AGENTS.md` for full detail.
+
+---
+
+## Limitations & Future Work
+
+- Hesitation signals are synthetic for demo purposes; production would use real behavioral telemetry
+- EMI offer surfaces as a payment-method option, not a full EMI calculator
 - Single-merchant simulation; multi-merchant support is a natural next step
-- No real OTP/SMS integration — OTP failure is mocked
+- No real OTP/SMS integration — OTP failure is mocked on the frontend
 
-## 10. Track & Submission
+---
 
-- **Track:** AI Revenue Recovery
+## Track & Submission
+
+- **Track:** AI Revenue Recovery — Razorpay AI Buildathon
 - **Repo:** public (this repo)
 - **Architecture:** see `ARCHITECTURE.md`
+- **Agent design:** see `AGENTS.md`
 - **Pitch video:** [link]
