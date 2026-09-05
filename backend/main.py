@@ -20,6 +20,7 @@ from database import init_db, get_connection, row_to_dict
 import rules_engine
 import agent_messaging
 import razorpay_client
+import simulate
 from dotenv import load_dotenv
 load_dotenv()
 
