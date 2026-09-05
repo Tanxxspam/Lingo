@@ -11,6 +11,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -18,6 +19,9 @@ from pydantic import BaseModel
 from database import init_db, get_connection, row_to_dict
 import rules_engine
 import agent_messaging
+import razorpay_client
+from dotenv import load_dotenv
+load_dotenv()
 
 app = FastAPI(title="Agentic Checkout Concierge API")
 
@@ -69,26 +73,21 @@ class InterventionOutcomeRequest(BaseModel):
 
 @app.post("/api/checkout/session", response_model=CreateSessionResponse)
 def create_session(req: CreateSessionRequest):
-    """
-    Create a new checkout session.
-
-    TODO (Phase 3): replace the placeholder order id below with a real
-    call to razorpay_client.create_order(req.order_amount).
-    """
+    """Create a new checkout session backed by a real Razorpay test-mode order."""
     session_id = str(uuid.uuid4())
-    placeholder_order_id = f"order_test_{uuid.uuid4().hex[:14]}"
+    order = razorpay_client.create_order(req.order_amount, receipt=session_id)
 
     with get_connection() as conn:
         conn.execute(
             """INSERT INTO sessions (id, razorpay_order_id, order_amount, status)
                VALUES (?, ?, ?, 'active')""",
-            (session_id, placeholder_order_id, req.order_amount),
+            (session_id, order["id"], req.order_amount),
         )
         conn.commit()
 
     return CreateSessionResponse(
         session_id=session_id,
-        razorpay_order_id=placeholder_order_id,
+        razorpay_order_id=order["id"],
         order_amount=req.order_amount,
         status="active",
     )
@@ -142,9 +141,9 @@ def log_event(req: EventRequest):
 
         events, prior_interventions = _get_session_context(conn, req.session_id)
 
-        # TODO (Phase 3): pull the real available methods from the Razorpay
-        # order instead of this hardcoded list.
-        available_payment_methods = ["card", "upi", "netbanking", "emi"]
+        available_payment_methods = razorpay_client.get_available_payment_methods(
+            session["order_amount"]
+        )
 
         decision = rules_engine.decide(
             events=events,
@@ -208,6 +207,27 @@ def log_outcome(req: InterventionOutcomeRequest):
     return {"status": "recorded"}
 
 
+@app.post("/api/checkout/session/{session_id}/payment-link")
+def create_recovery_payment_link(session_id: str):
+    """
+    Generate a Razorpay Payment Link for the recovered checkout — call
+    this once the user accepts an intervention (e.g. switches payment
+    method), so they have a fresh, completable payment flow to use.
+    """
+    with get_connection() as conn:
+        session = conn.execute(
+            "SELECT * FROM sessions WHERE id = ?", (session_id,)
+        ).fetchone()
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+    link = razorpay_client.create_payment_link(
+        order_amount_paise=session["order_amount"],
+        description="Complete your order — Agentic Checkout Concierge",
+    )
+    return link
+
+
 @app.get("/api/metrics/summary")
 def metrics_summary():
     """
@@ -233,6 +253,21 @@ def metrics_summary():
         "converted_sessions": converted_sessions,
         "recovered_revenue_paise": recovered_revenue,
     }
+
+
+class BatchSimulationRequest(BaseModel):
+    num_sessions: int = 100
+
+
+@app.post("/api/simulate/batch")
+def simulate_batch(req: BatchSimulationRequest):
+    """
+    Run a control-vs-treatment batch simulation using the real rules
+    engine. Does not touch the database — see simulate.py for why.
+    """
+    if req.num_sessions < 1 or req.num_sessions > 5000:
+        raise HTTPException(status_code=400, detail="num_sessions must be between 1 and 5000")
+    return simulate.run_batch(req.num_sessions)
 
 
 @app.get("/api/checkout/session/{session_id}")
