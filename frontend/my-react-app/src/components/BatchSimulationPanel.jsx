@@ -82,11 +82,11 @@ export default function BatchSimulationPanel() {
           <div className="mt-5 border-t border-ink/10 pt-5">
             <p className="text-xs font-medium text-ink/40">By intervention type</p>
             <div className="mt-2 space-y-1.5">
-              {Object.entries(result.by_intervention_type).map(([type, stats]) => (
+              {Object.entries(result.breakdown_by_intervention).map(([type, stats]) => (
                 <div key={type} className="flex justify-between text-sm">
                   <span className="text-ink/70">{humanizeActionType(type)}</span>
                   <span className="text-ink/50">
-                    {stats.shown} shown · {stats.accepted} accepted · {stats.converted} converted
+                    {stats.shown} shown · {stats.converted} converted
                   </span>
                 </div>
               ))}
